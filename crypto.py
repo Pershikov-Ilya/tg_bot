@@ -17,7 +17,7 @@ def get_crypto_price(crypto_id):
         result = cg.get_price(ids=coin_id, vs_currencies="usd")
         if coin_id in result and 'usd' in result[coin_id]:
             price = result[coin_id]['usd']
-            return f"Криптовалюта: {crypto_id}\nСтоимость на данный момент: {price}$"
+            return f"{crypto_id}: {price}$"
         else:
             return f"Не удалось получить данные для {crypto_id}. Проверьте правильность тикера."
     except Exception as e:

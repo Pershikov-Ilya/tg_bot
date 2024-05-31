@@ -15,8 +15,7 @@ def get_weather(city_name: str) -> str:
     response = requests.get(base_url, params=params)
     if response.status_code == 200:
         data = response.json()
-        weather_description = data["weather"][0]["description"]
         temperature = data["main"]["temp"]
-        return f"{city_name}: {weather_description}, температура: {temperature}°C"
+        return f"{city_name}: {temperature}°C"
     else:
         return "Не удалось получить данные о погоде. Проверьте название города."
