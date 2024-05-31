@@ -1,7 +1,5 @@
 from datetime import timedelta
 
-from loguru import logger as log
-
 from tinkoff.invest import Client, CandleInterval, InstrumentStatus
 from tinkoff.invest.services import InstrumentsService
 from tinkoff.invest.schemas import CandleSource
@@ -11,7 +9,6 @@ from pandas import DataFrame
 
 def get_price(api_token, ticker):
     with Client(api_token) as cl:
-        print(ticker)
         instruments: InstrumentsService = cl.instruments
         r = DataFrame(
             instruments.shares(instrument_status=InstrumentStatus.INSTRUMENT_STATUS_BASE).instruments)

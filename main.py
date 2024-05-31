@@ -2,10 +2,14 @@ import os
 import logging
 
 from stock import get_price
+from foreign_stocks import get_foreign_stock_data
+from crypto import get_crypto_price
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
-from pycoingecko import CoinGeckoAPI
+from aiogram.types import BotCommand
+
+
 from loguru import logger as log
 
 token_for_TgBot = os.getenv("tg_api_token")
@@ -13,11 +17,20 @@ api_token = os.getenv("TKS_API_TOKEN")
 
 bot = Bot(token=token_for_TgBot)
 dp = Dispatcher(bot=bot)
-cg = CoinGeckoAPI()
+
 
 # Логирование
 logging.basicConfig(level=logging.INFO)
 
+# Функция для установки меню команд
+async def set_commands(bot: Bot):
+    commands = [
+        BotCommand(command="/start", description="Начать работу с ботом"),
+        BotCommand(command="/ticker", description="Получить цену акции по тикеру"),
+        BotCommand(command="/foreign_ticker", description="Получить данные о зарубежных акциях"),
+        BotCommand(command="/crypto", description="Получить цену криптовалюты")
+    ]
+    await bot.set_my_commands(commands)
 
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
@@ -30,12 +43,26 @@ async def cmd_ticker(message: types.Message):
     log.info(f"Received /ticker command with args: {message.text}")
     args = message.text.split()
     if len(args) != 2:
-        await message.answer("неудачно")
+        await message.answer("Используйте формат команды: /ticker <тикер акции>")
         return
 
     ticker = args[-1]
     price = get_price(api_token, ticker)
     await message.answer(f"Цена акции по тикеру {ticker}: {price}")
+
+# Функция для получения данных об акциях через Yahoo Finance API
+
+
+@dp.message_handler(commands=["foreign_ticker"])
+async def foreign_ticker(message: types.Message):
+    log.info("Received /foreign command")
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Используйте формат команды: /foreign_ticker <тикер акции>")
+        return
+    ticker = args[-1]
+    latest_data = get_foreign_stock_data(ticker)
+    await message.answer(latest_data)
 
 
 @dp.message_handler(commands=["crypto"])
@@ -48,34 +75,15 @@ async def cmd_crypto(message: types.Message):
         return
 
     currency = args[1].lower()
-
-    # Получаем список всех криптовалют и их идентификаторов
-    try:
-        coins_list = cg.get_coins_list()
-        coin_id = None
-        for coin in coins_list:
-            if coin['symbol'] == currency or coin['id'] == currency:
-                coin_id = coin['id']
-                break
-
-        if not coin_id:
-            await message.answer(f"Не удалось найти криптовалюту с тикером {currency}. Проверьте правильность тикера.")
-            return
-
-        result = cg.get_price(ids=coin_id, vs_currencies="usd")
-        log.info(f"Received price data for {currency} (ID: {coin_id}): {result}")
-
-        if coin_id in result and 'usd' in result[coin_id]:
-            price = result[coin_id]['usd']
-            await message.answer(f"Криптовалюта: {currency}\nСтоимость на данный момент: {price}$")
-        else:
-            await message.answer(f"Не удалось получить данные для {currency}. Проверьте правильность тикера.")
-    except Exception as e:
-        log.error(f"Ошибка при получении данных: {e}")
-        await message.answer("Произошла ошибка при получении данных. Пожалуйста, попробуйте позже.")
-
+    price_data = get_crypto_price(currency)
+    await message.answer(price_data)
 
 
 if __name__ == '__main__':
     log.info("Starting bot")
-    executor.start_polling(dp, skip_updates=True)
+
+    # Устанавливаем команды при запуске бота
+    async def on_startup(dp):
+        await set_commands(bot)
+
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
