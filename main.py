@@ -4,6 +4,7 @@ import logging
 from stock import get_price
 from foreign_stocks import get_foreign_stock_data
 from crypto import get_crypto_price
+from weaher import get_weather
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
@@ -14,6 +15,7 @@ from loguru import logger as log
 
 token_for_TgBot = os.getenv("tg_api_token")
 api_token = os.getenv("TKS_API_TOKEN")
+
 
 bot = Bot(token=token_for_TgBot)
 dp = Dispatcher(bot=bot)
@@ -28,7 +30,8 @@ async def set_commands(bot: Bot):
         BotCommand(command="/start", description="Начать работу с ботом"),
         BotCommand(command="/ticker", description="Получить цену акции по тикеру"),
         BotCommand(command="/foreign_ticker", description="Получить данные о зарубежных акциях"),
-        BotCommand(command="/crypto", description="Получить цену криптовалюты")
+        BotCommand(command="/crypto", description="Получить цену криптовалюты"),
+        BotCommand(command="/weather", description="Получить прогноз погоды")
     ]
     await bot.set_my_commands(commands)
 
@@ -78,6 +81,18 @@ async def cmd_crypto(message: types.Message):
     price_data = get_crypto_price(currency)
     await message.answer(price_data)
 
+@dp.message_handler(commands=["weather"])
+async def cmd_weather(message: types.Message):
+    log.info(f"Received /weather command with args: {message.text}")
+    args = message.text.split()
+
+    if len(args) != 2:
+        await message.answer("Пожалуйста, используйте формат команды: /weather <город>")
+        return
+
+    city_name = args[1]
+    weather_data = get_weather(city_name)
+    await message.answer(weather_data)
 
 if __name__ == '__main__':
     log.info("Starting bot")
