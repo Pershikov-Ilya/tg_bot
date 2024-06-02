@@ -10,5 +10,5 @@ celery_app.conf.update(
     task_routes={
         "app.tasks.send_event_notification": "main-queue",
     },
-    broker_connection_retry_on_startup=True  # Добавьте эту строку
+    broker_connection_retry_on_startup=True 
 )
