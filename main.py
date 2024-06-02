@@ -1,30 +1,139 @@
 import os
-import logging
+import requests
 
-from stock import get_price
-from foreign_stocks import get_foreign_stock_data, get_course_of_currency, get_foreign_stock_data_for_info
-from crypto import get_crypto_price
-from weaher import get_weather
+from func_bot.stock import get_price
+from func_bot.foreign_stocks import get_foreign_stock_data, get_course_of_currency, get_foreign_stock_data_for_info
+from func_bot.crypto import get_crypto_price
+from func_bot.weaher import get_weather
 
 from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils import executor
 from aiogram.types import BotCommand
 
+from fastapi import FastAPI, Depends, HTTPException, Form
+from fastapi.templating import Jinja2Templates
+from starlette.requests import Request
+
+from fastapi.responses import JSONResponse, HTMLResponse
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.dependencies import get_db
+from app.models import User
+from app.schemas import UserCreate, EventCreate, Event
+from app.database import create_user, create_event, get_events_for_user, get_user
+import uvicorn
 
 from loguru import logger as log
 
-token_for_TgBot = os.getenv("tg_api_token")
 api_token = os.getenv("TKS_API_TOKEN")
-
+API_KEY = os.getenv("WEATHER_API_KEY")
+WEB_APP_URL = 'http://localhost:8000'
+token_for_TgBot = "7219911289:AAG8059khjCBJ8gV1FYV11Q7LU7hZvt3OjM"
 
 bot = Bot(token=token_for_TgBot)
 dp = Dispatcher(bot=bot)
+app = FastAPI()
+
+templates = Jinja2Templates(directory="templates")
+dp.middleware.setup(LoggingMiddleware())
+
+@dp.message_handler(commands=['register'])
+async def start(message: types.Message):
+    await message.reply(f"Привет! Пожалуйста, зарегистрируйтесь на сайте {WEB_APP_URL}/register")
+
+@dp.message_handler(commands=['addchat'])
+async def add_chat(message: types.Message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    response = requests.post(f"{WEB_APP_URL}/add_chat", json={'chat_id': chat_id, 'user_id': user_id})
+    if response.status_code == 200:
+        await message.reply("Чат успешно добавлен.")
+    else:
+        await message.reply("Ошибка при добавлении чата.")
 
 
-# Логирование
-logging.basicConfig(level=logging.INFO)
+@app.post("/register")
+async def register_user(username: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)):
+    try:
+        existing_user = await db.execute(select(User).filter(User.username == username))
+        if existing_user.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Username already taken")
 
+        new_user = User(username=username, hashed_password=password)  # Замените на хеширование пароля
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+
+        return JSONResponse(status_code=201, content={"message": "User registered successfully"})
+    except Exception as e:
+        log.error(f"Error registering user: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.get("/register", response_class=HTMLResponse)
+async def get_register_form(request: Request):
+    try:
+        return templates.TemplateResponse("register.html", {"request": request})
+    except Exception as e:
+        log.error(f"Error rendering registration form: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome to the API"}
+
+
+@app.post("/create_event", response_model=Event)
+async def create_event(event: EventCreate, db: AsyncSession = Depends(get_db)):
+    return await create_event(db, event)
+
+@app.get("/events", response_model=list[Event])
+async def get_events(user_id: int, db: AsyncSession = Depends(get_db)):
+    return await get_events_for_user(db, user_id)
 # Функция для установки меню команд
+
+@dp.message_handler(commands=['login'])
+async def login(message: types.Message):
+    args = message.get_args().split()
+    if len(args) != 2:
+        await message.reply("Используйте команду /login <username> <password>")
+        return
+
+    username, password = args
+    response = requests.post(f"{WEB_APP_URL}/login", json={'username': username, 'password': password})
+
+    if response.status_code == 200:
+        await message.reply("Успешный вход в систему!")
+        # Сохраните токен или другие данные для дальнейшего использования.
+    else:
+        await message.reply("Неверное имя пользователя или пароль.")
+
+
+@dp.message_handler(commands=['addevent'])
+async def add_event(message: types.Message):
+    args = message.get_args().split(',')
+
+    if len(args) != 4:
+        await message.reply("Используйте команду /addevent <title>,<description>,<start_time>,<end_time>")
+        return
+
+    title, description, start_time, end_time = args
+
+    # Дополнительно можно добавить проверку формата времени и другие валидации.
+
+    response = requests.post(f"{WEB_APP_URL}/create_event", json={
+        'title': title,
+        'description': description,
+        'start_time': start_time,
+        'end_time': end_time,
+        'user_id': message.from_user.id  # Здесь предполагается использование идентификатора пользователя из Telegram.
+    })
+
+    if response.status_code == 200:
+        await message.reply("Событие успешно добавлено.")
+    else:
+        await message.reply("Ошибка при добавлении события.")
+
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command="/start", description="Начать работу с ботом"),
@@ -53,7 +162,7 @@ async def cmd_ticker(message: types.Message):
 
     ticker = args[-1]
     price = get_price(api_token, ticker)
-    await message.answer(f"Цена акции {ticker}: {price} rub")
+    await message.answer(f"Цена {ticker}: {price} rub")
 
 # Функция для получения данных об акциях через Yahoo Finance API
 
@@ -93,7 +202,7 @@ async def cmd_weather(message: types.Message):
         return
 
     city_name = args[1]
-    weather_data = get_weather(city_name)
+    weather_data = get_weather(API_KEY, city_name)
     await message.answer(weather_data)
 
 # Новая команда /info
@@ -148,3 +257,5 @@ if __name__ == '__main__':
     async def on_startup(dp):
         await set_commands(bot)
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)

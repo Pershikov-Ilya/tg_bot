@@ -1,0 +1,16 @@
+fastapi~=0.103.0
+uvicorn~=0.20.0
+sqlalchemy~=2.0.25
+python-multipart
+requests~=2.31.0
+passlib~=1.7.4
+tinkoff~=0.1.1
+pandas~=2.2.2
+yfinance~=0.2.38
+pycoingecko~=3.1.0
+pydantic~=1.10.12
+sqlalchemy
+aiogram~=2.24
+loguru~=0.7.2
+
+celery~=5.4.0

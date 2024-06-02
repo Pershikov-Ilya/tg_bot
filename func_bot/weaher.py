@@ -2,9 +2,9 @@ import requests
 import os
 from loguru import logger as log
 
-API_KEY = os.getenv("WEATHER_API_KEY")
 
-def get_weather(city_name: str) -> str:
+
+def get_weather(API_KEY, city_name: str) -> str:
     base_url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
         "q": city_name,
