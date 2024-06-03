@@ -134,6 +134,13 @@ async def add_event(message: types.Message):
     else:
         await message.reply("Ошибка при добавлении события.")
 
+@app.exception_handler(Exception)
+async def unicorn_exception_handler(request, exc):
+    log.error(f"Unexpected error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+    )
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command="/start", description="Начать работу с ботом"),
